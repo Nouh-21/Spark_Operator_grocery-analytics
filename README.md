@@ -43,3 +43,5 @@ PYTHONPATH=src python -m pytest -q
 ```
 
 The sample CSV is baked into the image at `/opt/spark/data/purchases.csv`. For real workloads, use cluster-accessible object storage or mounted persistent volumes for input and output.
+
+## coderabbit review the code
