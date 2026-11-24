@@ -1,0 +1,32 @@
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: {{ .Values.spark.applicationName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+spec:
+  type: Python
+  mode: cluster
+  sparkVersion: {{ .Values.spark.version | quote }}
+  image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+  imagePullPolicy: {{ .Values.image.pullPolicy }}
+  mainApplicationFile: {{ .Values.spark.mainApplicationFile | quote }}
+  restartPolicy:
+    type: {{ .Values.spark.restartPolicy }}
+  timeToLiveSeconds: {{ .Values.spark.timeToLiveSeconds }}
+  driver:
+    cores: {{ .Values.spark.driver.cores }}
+    memory: {{ .Values.spark.driver.memory | quote }}
+    serviceAccount: {{ .Values.spark.driver.serviceAccount }}
+    labels:
+      app.kubernetes.io/name: {{ .Values.spark.applicationName }}
+      app.kubernetes.io/component: driver
+  executor:
+    instances: {{ .Values.spark.executor.instances }}
+    cores: {{ .Values.spark.executor.cores }}
+    memory: {{ .Values.spark.executor.memory | quote }}
+    labels:
+      app.kubernetes.io/name: {{ .Values.spark.applicationName }}
+      app.kubernetes.io/component: executor
