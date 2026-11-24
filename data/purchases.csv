@@ -1,7 +1,0 @@
-customer_id,purchase_id,item,quantity,unit_price
-C001,P1001,Apples,2,1.50
-C001,P1001,Bread,1,2.00
-C001,P1002,Milk,2,1.25
-C002,P1003,Rice,1,4.00
-C002,P1004,Tomatoes,3,0.80
-C003,P1005,Coffee,1,6.50

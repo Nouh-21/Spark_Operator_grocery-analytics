@@ -1,1 +1,0 @@
-"""Grocery purchase analytics application."""

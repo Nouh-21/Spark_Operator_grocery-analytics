@@ -1,6 +1,0 @@
-apiVersion: v2
-name: grocery-analytics
-description: PySpark grocery customer aggregation managed by Kubeflow Spark Operator
-type: application
-version: 0.1.0
-appVersion: "3.5.7"
