@@ -109,17 +109,58 @@ jobs:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: publish
     runs-on: ubuntu-latest
+    concurrency:
+      group: gitops-main
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
       - name: Update image tag in GitOps manifest
         run: |
-          sed -i "s/^  tag: .*/  tag: \"${GITHUB_SHA}\"/" helm/grocery-analytics/values.yaml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add helm/grocery-analytics/values.yaml
-          git diff --cached --quiet || git commit -m "chore(gitops): deploy ${GITHUB_SHA}"
-          git push
+
+          max_attempts=5
+          values_file=helm/grocery-analytics/values.yaml
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "GitOps update attempt ${attempt}/${max_attempts}"
+            git fetch origin main
+            git checkout -B main origin/main
+
+            current_tag=$(awk '$1 == "tag:" { gsub(/"/, "", $2); print $2; exit }' "$values_file")
+            # Full history is available so this ancestry check rejects stale runs.
+            if [[ "$current_tag" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "${current_tag}^{commit}" 2>/dev/null; then
+              if git merge-base --is-ancestor "$GITHUB_SHA" "$current_tag"; then
+                echo "Skipping stale run ${GITHUB_SHA}; ${current_tag} is already deployed."
+                exit 0
+              fi
+              if ! git merge-base --is-ancestor "$current_tag" "$GITHUB_SHA"; then
+                echo "Cannot establish commit order between ${current_tag} and ${GITHUB_SHA}."
+                exit 1
+              fi
+            fi
+
+            sed -i "s/^  tag: .*/  tag: \"${GITHUB_SHA}\"/" "$values_file"
+            git add "$values_file"
+            if git diff --cached --quiet; then
+              echo "Image ${GITHUB_SHA} is already recorded in GitOps."
+              exit 0
+            fi
+            git commit -m "chore(gitops): deploy ${GITHUB_SHA}"
+
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+
+          echo "GitOps update failed after ${max_attempts} attempts."
+          exit 1
