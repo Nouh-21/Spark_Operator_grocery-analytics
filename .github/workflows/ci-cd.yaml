@@ -111,6 +111,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: gitops-main
+      queue: max
       cancel-in-progress: false
     permissions:
       contents: write

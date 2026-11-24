@@ -23,7 +23,17 @@ The workflow runs pytest and builds the container for pull requests. Trivy block
 
 ## Cluster and Argo CD setup
 
-1. Install Helm 3 and a compatible Kubeflow Spark Operator with its `SparkApplication` CRD. The chart uses `sparkoperator.k8s.io/v1beta2` and Spark 3.5.7.
+1. Install Helm 3 and Kubeflow Spark Operator chart 2.4.0 with its `SparkApplication` CRD. The operator must watch the `spark-jobs` namespace used by this chart. Create that namespace before installing the operator, then configure its chart values as follows (the chart defaults to watching only `default`):
+
+   ```yaml
+   spark:
+     jobNamespaces:
+       - spark-jobs
+     rbac:
+       create: true
+   ```
+
+   Apply these values when installing/upgrading the operator (for example, with a values file passed to `helm upgrade --install`). The chart creates the operator RBAC for the configured job namespaces when `spark.rbac.create` is enabled.
 2. Ensure cluster capacity for one 1-core/1 GiB driver and two 1-core/1 GiB executors.
 3. Apply `argocd/application.yaml` once in the Argo CD namespace. It points to `Nouh-21/Spark_Operator_grocery-analytics`.
 4. Ensure Argo CD can read the repository and access the destination cluster.
