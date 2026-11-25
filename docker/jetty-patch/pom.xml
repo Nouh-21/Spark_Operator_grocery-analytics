@@ -8,7 +8,7 @@
   <version>1.0.0</version>
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <jetty.version>12.1.10</jetty.version>
+    <jetty.version>12.1.15</jetty.version>
     <maven.compiler.release>17</maven.compiler.release>
   </properties>
   <dependencies>

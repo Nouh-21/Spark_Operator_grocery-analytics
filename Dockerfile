@@ -1,5 +1,5 @@
 # Spark 4.3.0 shades Jetty 12.1.8 into spark-core. Rebuild that shaded set
-# with the patched Jetty 12.1.10 release before creating the application image.
+# with the current Jetty 12.1.15 release before creating the image.
 FROM maven:3.9-eclipse-temurin-17 AS jetty-patch
 WORKDIR /build
 COPY docker/jetty-patch/pom.xml ./pom.xml
@@ -45,9 +45,14 @@ RUN python3 /tmp/download_maven_artifact.py \
     && install -m 0644 /tmp/lz4-java.jar "/opt/spark/jars/lz4-java-${LZ4_JAVA_VERSION}.jar" \
     && rm /tmp/lz4-java.jar
 
-# Hadoop shades JLine 3.9.0, including interactive built-ins, into
-# hadoop-client-runtime. The batch app needs none of them; remove those classes
-# and their Maven inventory entries, including the vulnerable Less pager.
+# Hadoop 3.5.0 shades Jetty 9.4.58, which is EOL and cannot be updated from
+# Maven Central. This batch job does not use Hadoop's embedded Jetty server.
+COPY scripts/remove_shaded_hadoop_jetty.py /tmp/remove_shaded_hadoop_jetty.py
+RUN python3 /tmp/remove_shaded_hadoop_jetty.py \
+      /opt/spark/jars/hadoop-client-runtime-3.5.0.jar \
+    && rm /tmp/remove_shaded_hadoop_jetty.py
+
+# Hadoop also shades JLine built-ins; this batch app does not need them.
 COPY scripts/remove_shaded_jline_builtins.py /tmp/remove_shaded_jline_builtins.py
 RUN python3 /tmp/remove_shaded_jline_builtins.py \
       /opt/spark/jars/hadoop-client-runtime-*.jar \

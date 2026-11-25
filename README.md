@@ -6,10 +6,12 @@ PySpark batch application that reads sample purchase lines, rejects invalid rows
 
 - `src/grocery_analytics/app.py`: PySpark transformation and entry point.
 - `tests/`: pytest coverage for aggregation, invalid rows, and input schema.
-- `Dockerfile`: Spark 3.5.7 runtime image with the app and sample CSV.
+- `Dockerfile`: Spark 4.3.0 runtime image with the app, sample CSV, and maintained Jetty patched into Spark's shaded core JAR.
 - `helm/grocery-analytics/`: Helm chart for the namespace, driver service account/RBAC, and Spark Operator resource.
 - `argocd/application.yaml`: Argo CD Application configured for manual sync.
 - `.github/workflows/ci-cd.yaml`: tests, image build and Trivy scan, Docker Hub publish, then GitOps tag update.
+
+The Docker build upgrades Ubuntu packages before installing Spark dependencies. It patches Spark Core's relocated Jetty to 12.1.15 and removes the unused, shaded Jetty 9 classes from Hadoop's `hadoop-client-runtime-3.5.0.jar`. This removal is specific to the batch image; Hadoop services that require their embedded Jetty server need a supported Hadoop/Jetty distribution instead.
 
 ## GitHub configuration
 

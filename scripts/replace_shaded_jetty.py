@@ -14,7 +14,7 @@ JETTY_MAVEN_METADATA = "META-INF/maven/org.eclipse.jetty"
 PATCHED_SECURITY_METADATA = (
     "META-INF/maven/org.eclipse.jetty/jetty-security/pom.properties"
 )
-JETTY_VERSION = b"12.1.10"
+JETTY_VERSION = b"12.1.15"
 
 
 def is_old_jetty_entry(name: str) -> bool:
@@ -44,7 +44,7 @@ def main() -> None:
 
         security_metadata = patch_entries.get(PATCHED_SECURITY_METADATA)
         if security_metadata is None or JETTY_VERSION not in security_metadata[1]:
-            raise RuntimeError("The shaded patch does not identify jetty-security 12.1.10")
+            raise RuntimeError("The shaded patch does not identify jetty-security 12.1.15")
         if not any(name.startswith(JETTY_CLASSES) for name in patch_entries):
             raise RuntimeError("The shaded Jetty patch contains no relocated Jetty classes")
 
@@ -83,7 +83,7 @@ def main() -> None:
         os.chmod(temp_path, stat.S_IMODE(spark_jar.stat().st_mode))
         os.replace(temp_path, spark_jar)
         temp_path = None
-        print(f"Replaced shaded Jetty in {spark_jar} with Jetty 12.1.10")
+        print(f"Replaced shaded Jetty in {spark_jar} with Jetty 12.1.15")
     finally:
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
