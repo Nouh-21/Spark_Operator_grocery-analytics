@@ -1,0 +1,183 @@
+name: CI and GitOps delivery
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "data/**"
+      - "Dockerfile"
+      - "docker/**"
+      - "scripts/**"
+      - "requirements-dev.txt"
+      - "helm/**"
+      - ".github/workflows/ci-cd.yaml"
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "helm/grocery-analytics/values.yaml"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: PYTHONPATH=src pytest -q
+
+  build_scan:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v4
+      - name: Build image archive
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          tags: grocery-analytics:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/grocery-analytics.tar
+      - name: Load image for scanning
+        run: docker load --input /tmp/grocery-analytics.tar
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: grocery-analytics:${{ github.sha }}
+          format: json
+          output: trivy-report.json
+          # Keep the Trivy report, but do not block the delivery pipeline on findings.
+          exit-code: "1"
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          if-no-files-found: error
+      - name: Run the grocery job in the scanned image
+        run: |
+          docker run --rm -e SPARK_LOCAL_IP=127.0.0.1 -e SPARK_DRIVER_BIND_ADDRESS=127.0.0.1 \
+            "grocery-analytics:${{ github.sha }}" driver --master 'local[2]' \
+            --conf spark.sql.shuffle.partitions=4 /opt/spark/app/grocery_analytics/app.py
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: grocery-image
+          path: /tmp/grocery-analytics.tar
+          retention-days: 1
+
+  publish:
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+    needs: build_scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: grocery-image
+          path: /tmp
+      - name: Load scanned image
+        run: docker load --input /tmp/grocery-analytics.tar
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Generate image tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: docker.io/nouh23/grocery-analytics
+          tags: |
+            type=sha,format=long,prefix=
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
+      - name: Publish image with generated tags
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          while IFS= read -r image_tag; do
+            [ -z "$image_tag" ] && continue
+            docker tag "grocery-analytics:${GITHUB_SHA}" "$image_tag"
+            docker push "$image_tag"
+          done <<< "$IMAGE_TAGS"
+
+  update_gitops:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: publish
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gitops-main
+      queue: max
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+          fetch-depth: 0
+      - name: Update image tag in GitOps manifest
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          max_attempts=5
+          values_file=helm/grocery-analytics/values.yaml
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "GitOps update attempt ${attempt}/${max_attempts}"
+            git fetch origin main
+            git checkout -B main origin/main
+
+            current_tag=$(awk '$1 == "tag:" { gsub(/"/, "", $2); print $2; exit }' "$values_file")
+            # Full history is available so this ancestry check rejects stale runs.
+            if [[ "$current_tag" =~ ^[0-9a-f]{40}$ ]] && git cat-file -e "${current_tag}^{commit}" 2>/dev/null; then
+              if git merge-base --is-ancestor "$GITHUB_SHA" "$current_tag"; then
+                echo "Skipping stale run ${GITHUB_SHA}; ${current_tag} is already deployed."
+                exit 0
+              fi
+              if ! git merge-base --is-ancestor "$current_tag" "$GITHUB_SHA"; then
+                echo "Cannot establish commit order between ${current_tag} and ${GITHUB_SHA}."
+                exit 1
+              fi
+            fi
+
+            sed -i "s/^  tag: .*/  tag: \"${GITHUB_SHA}\"/" "$values_file"
+            git add "$values_file"
+            if git diff --cached --quiet; then
+              echo "Image ${GITHUB_SHA} is already recorded in GitOps."
+              exit 0
+            fi
+            git commit -m "chore(gitops): deploy ${GITHUB_SHA}"
+
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              sleep "$((attempt * 2))"
+            fi
+          done
+
+          echo "GitOps update failed after ${max_attempts} attempts."
+          exit 1
