@@ -45,6 +45,15 @@ RUN python3 /tmp/download_maven_artifact.py \
     && install -m 0644 /tmp/lz4-java.jar "/opt/spark/jars/lz4-java-${LZ4_JAVA_VERSION}.jar" \
     && rm /tmp/lz4-java.jar
 
+# Spark's Hive runtime includes libthrift 0.16.0; replace it with the fixed release.
+ARG THRIFT_VERSION=0.24.0
+RUN python3 /tmp/download_maven_artifact.py \
+      "https://repo.maven.apache.org/maven2/org/apache/thrift/libthrift/${THRIFT_VERSION}/libthrift-${THRIFT_VERSION}.jar" \
+      /tmp/libthrift.jar \
+    && rm -f /opt/spark/jars/libthrift-*.jar \
+    && install -m 0644 /tmp/libthrift.jar "/opt/spark/jars/libthrift-${THRIFT_VERSION}.jar" \
+    && rm /tmp/libthrift.jar
+
 # Hadoop 3.5.0 shades Jetty 9.4.58, which is EOL and cannot be updated from
 # Maven Central. This batch job does not use Hadoop's embedded Jetty server.
 COPY scripts/remove_shaded_hadoop_jetty.py /tmp/remove_shaded_hadoop_jetty.py
