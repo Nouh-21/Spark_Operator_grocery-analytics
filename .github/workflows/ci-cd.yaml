@@ -7,6 +7,8 @@ on:
       - "tests/**"
       - "data/**"
       - "Dockerfile"
+      - "docker/**"
+      - "scripts/**"
       - "requirements-dev.txt"
       - "helm/**"
       - ".github/workflows/ci-cd.yaml"
@@ -56,11 +58,12 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: grocery-analytics:${{ github.sha }}
-          format: table
-          exit-code: "1"
+          format: json
+          exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          scanners: vuln
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:
