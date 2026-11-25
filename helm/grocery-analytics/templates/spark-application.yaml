@@ -12,6 +12,8 @@ spec:
   sparkVersion: {{ .Values.spark.version | quote }}
   image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
   imagePullPolicy: {{ .Values.image.pullPolicy }}
+  imagePullSecrets:
+{{- toYaml .Values.image.pullSecrets | nindent 4 }}
   mainApplicationFile: {{ .Values.spark.mainApplicationFile | quote }}
   restartPolicy:
     type: {{ .Values.spark.restartPolicy }}

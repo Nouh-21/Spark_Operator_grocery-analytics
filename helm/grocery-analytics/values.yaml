@@ -3,10 +3,12 @@ namespace: spark-jobs
 image:
   repository: docker.io/nouh23/grocery-analytics
   tag: latest
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
+  pullSecrets:
+    - dockerhub-registry
 
 spark:
-  version: "3.5.7"
+  version: "4.3.0"
   applicationName: grocery-customer-aggregation
   mainApplicationFile: local:///opt/spark/app/grocery_analytics/app.py
   restartPolicy: Never
