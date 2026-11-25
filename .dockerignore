@@ -1,11 +1,6 @@
 .git
-.github
-argocd
-helm
 k8s
-tests
 README.md
 RECAP_PROJET.md
-requirements-dev.txt
 __pycache__
 *.py[cod]
