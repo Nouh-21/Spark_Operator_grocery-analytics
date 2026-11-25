@@ -5,16 +5,10 @@ WORKDIR /build
 COPY docker/jetty-patch/pom.xml ./pom.xml
 RUN mvn -B -ntp package
 
-FROM apache/spark:4.3.0-python3
+FROM apache/spark:4.3.0-python3 AS spark-runtime
 
 USER root
 WORKDIR /opt/spark
-
-# Bring the Ubuntu packages to their current security revisions instead of
-# carrying the frozen OS package snapshot from the upstream Spark image.
-RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends \
-    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=jetty-patch /build/target/jetty-patched-1.0.0.jar /tmp/jetty-patched.jar
 COPY scripts/replace_shaded_jetty.py /tmp/replace_shaded_jetty.py
@@ -83,7 +77,37 @@ RUN python3 /tmp/remove_shaded_jline_builtins.py \
       /opt/spark/jars/jline-3*.jar \
     && rm /tmp/remove_shaded_jline_builtins.py /tmp/download_maven_artifact.py
 
-COPY --chown=spark:root src/grocery_analytics /opt/spark/app/grocery_analytics
-COPY --chown=spark:root data/purchases.csv /opt/spark/data/purchases.csv
-ENV PYTHONPATH=/opt/spark/app
+# Keep only the Spark runtime payload. The upstream image also includes R,
+# examples, sample datasets and tests, which this PySpark batch job does not use.
+FROM eclipse-temurin:21-jre-noble AS runtime
+
+USER root
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      bash gosu passwd procps python3 tini \
+    && rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/*
+
+RUN useradd --no-log-init --uid 185 --gid 0 --home-dir /opt/spark \
+      --no-create-home --shell /usr/sbin/nologin spark \
+    && mkdir -p /opt/spark/conf /opt/spark/work-dir \
+    && chown -R 185:0 /opt/spark
+
+COPY --from=spark-runtime --chown=185:0 /opt/spark/jars /opt/spark/jars
+COPY --from=spark-runtime --chown=185:0 /opt/spark/python /opt/spark/python
+COPY --from=spark-runtime --chown=185:0 /opt/spark/bin /opt/spark/bin
+COPY --from=spark-runtime --chown=185:0 /opt/spark/sbin /opt/spark/sbin
+COPY --from=spark-runtime /opt/spark/RELEASE /opt/spark/RELEASE
+COPY --from=spark-runtime /opt/entrypoint.sh /opt/entrypoint.sh
+COPY --chown=185:0 src/grocery_analytics /opt/spark/app/grocery_analytics
+COPY --chown=185:0 data/purchases.csv /opt/spark/data/purchases.csv
+
+ENV SPARK_HOME=/opt/spark \
+    PYSPARK_PYTHON=python3 \
+    PYSPARK_DRIVER_PYTHON=python3 \
+    PYTHONPATH=/opt/spark/app \
+    PATH=/opt/spark/bin:/opt/java/openjdk/bin:${PATH}
+
+WORKDIR /opt/spark/work-dir
 USER spark
+ENTRYPOINT ["/opt/entrypoint.sh"]
+CMD ["bash"]

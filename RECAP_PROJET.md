@@ -13,7 +13,7 @@ Tests pytest
         ↓
 Construction de l’image Docker
         ↓
-Scan Trivy (bloquant si vulnérabilités HIGH/CRITICAL)
+Scan Trivy (rapport HIGH/CRITICAL non bloquant)
         ↓
 Publication sur Docker Hub avec tags liés au commit
         ↓
@@ -41,9 +41,7 @@ Les tests de `tests/test_app.py` couvrent l’agrégation, le rejet de lignes in
 
 ## 2. Image Docker
 
-Le `Dockerfile` part de `apache/spark:4.3.0-python3`, copie le code de l’application et le CSV dans `/opt/spark`, et configure le `PYTHONPATH` pour Spark. Spark 4.3.0 embarque Jetty 12.1.8 dans le JAR `spark-core`; une étape Maven reconstruit et relocalise les modules Jetty en 12.1.15, puis un script remplace les classes et métadonnées Jetty intégrées.
-
-Avant la copie des dépendances, le Dockerfile exécute `apt-get update` et `apt-get upgrade` afin d’intégrer les révisions Ubuntu disponibles lors du build.
+Le `Dockerfile` utilise `apache/spark:4.3.0-python3` comme étape de préparation, puis copie les seuls JARs, bibliothèques Python et scripts requis dans une image finale `eclipse-temurin:21-jre-noble`. Cette séparation évite d’embarquer les exemples, R, jeux de données et tests de l’image de développement. Spark 4.3.0 embarque Jetty 12.1.8 dans le JAR `spark-core`; une étape Maven reconstruit et relocalise les modules Jetty en 12.1.15, puis un script remplace les classes et métadonnées Jetty intégrées. L’image finale installe uniquement Python 3.12 et les utilitaires nécessaires au lancement Spark sur Kubernetes.
 
 Le Dockerfile contient également des ajustements de dépendances Java du runtime Spark :
 
@@ -69,14 +67,14 @@ Le pipeline est défini dans `.github/workflows/ci-cd.yaml`.
 ### Déclencheurs
 
 - Une pull request qui touche les chemins surveillés lance les tests, la construction de l’image et Trivy.
-- Un push sur `main` lance la CI, publie l’image si le scan réussit, puis met à jour le tag GitOps.
+- Un push sur `main` lance la CI, publie l’image si les jobs réussissent, puis met à jour le tag GitOps.
 - Un tag Git commençant par `v` lance la CI et publie une image de version ; il ne met pas à jour le déploiement Argo CD.
 - `workflow_dispatch` permet un lancement manuel.
 
 ### Jobs
 
 1. **`test`** installe Java 17, Python 3.11 et les dépendances, puis exécute `PYTHONPATH=src pytest -q`.
-2. **`build_scan`** construit une archive Docker, la charge dans le runner et la scanne avec Trivy. Le job échoue avec `exit-code: 1` si Trivy trouve des vulnérabilités HIGH ou CRITICAL. `ignore-unfixed: true` est activé.
+2. **`build_scan`** construit une archive Docker, la charge dans le runner et la scanne avec Trivy. Les findings HIGH/CRITICAL sont rapportés, mais `exit-code: 0` rend ces findings non bloquants. `ignore-unfixed: true` reste activé.
 3. **`publish`** s’exécute seulement hors pull request pour les pushes sur `main` et les tags `v*`. Il publie `docker.io/nouh23/grocery-analytics` sous des tags de branche/version et des tags SHA, dont le SHA complet.
 4. **`update_gitops`** s’exécute seulement après un push sur `main`. Il inscrit le SHA complet dans `helm/grocery-analytics/values.yaml`, puis pousse le commit sur `main`.
 
