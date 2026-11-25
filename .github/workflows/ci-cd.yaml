@@ -59,11 +59,24 @@ jobs:
         with:
           image-ref: grocery-analytics:${{ github.sha }}
           format: json
+          output: trivy-report.json
           # Keep the Trivy report, but do not block the delivery pipeline on findings.
           exit-code: "0"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+      - name: Upload Trivy report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-report
+          path: trivy-report.json
+          if-no-files-found: error
+      - name: Run the grocery job in the scanned image
+        run: |
+          docker run --rm -e SPARK_LOCAL_IP=127.0.0.1 -e SPARK_DRIVER_BIND_ADDRESS=127.0.0.1 \
+            "grocery-analytics:${{ github.sha }}" driver --master 'local[2]' \
+            --conf spark.sql.shuffle.partitions=4 /opt/spark/app/grocery_analytics/app.py
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'
         with:

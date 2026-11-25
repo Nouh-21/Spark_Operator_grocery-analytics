@@ -1,9 +1,31 @@
+# syntax=docker/dockerfile:1
 # Spark 4.3.0 shades Jetty 12.1.8 into spark-core. Rebuild that shaded set
 # with the current Jetty 12.1.15 release before creating the image.
 FROM maven:3.9-eclipse-temurin-17 AS jetty-patch
 WORKDIR /build
 COPY docker/jetty-patch/pom.xml ./pom.xml
 RUN mvn -B -ntp package
+
+FROM maven:3.9-eclipse-temurin-17 AS java-patch
+WORKDIR /build
+COPY docker/java-patch/pom.xml ./pom.xml
+RUN set -eu; \
+    build_patch() { \
+      name="$1"; common="$2"; thirdparty="$3"; shift 3; \
+      mvn -B -ntp package -Dpatch.file="/patches/${name}.jar" \
+        -Dguava.common="$common" -Dguava.thirdparty="$thirdparty" "$@"; \
+    }; \
+    mkdir /patches; \
+    build_patch spark org.sparkproject.guava org.sparkproject.guava.thirdparty; \
+    build_patch curator org.apache.curator.shaded.com.google.common org.apache.curator.shaded.com.google.thirdparty; \
+    for relocation in \
+      hadoop:org.apache.hadoop.shaded \
+      hadoop-thirdparty:org.apache.hadoop.thirdparty \
+      hadoop-curator:org.apache.hadoop.shaded.org.apache.curator.shaded; do \
+      name=${relocation%%:*}; prefix=${relocation#*:}; \
+      if [ "$name" = hadoop ]; then set -- -Phadoop-jackson; else set --; fi; \
+      build_patch "$name" "${prefix}.com.google.common" "${prefix}.com.google.thirdparty" "$@"; \
+    done
 
 FROM apache/spark:4.3.0-python3 AS spark-runtime
 
@@ -76,6 +98,13 @@ RUN python3 /tmp/remove_shaded_jline_builtins.py \
       /opt/spark/jars/hadoop-client-runtime-*.jar \
       /opt/spark/jars/jline-3*.jar \
     && rm /tmp/remove_shaded_jline_builtins.py /tmp/download_maven_artifact.py
+
+# Patch the Java classpath and omit the optional Spark Connect Scala REPL,
+# which carries its own bundled Netty and Guava and is unused by the batch job.
+RUN --mount=type=bind,from=java-patch,source=/patches,target=/patches \
+    --mount=type=bind,source=scripts,target=/patch-scripts \
+    python3 -B /patch-scripts/patch_java_runtime.py /opt/spark/jars /patches \
+    && rm -rf /opt/spark/jars/connect-repl
 
 # Keep only the Spark runtime payload. The upstream image also includes R,
 # examples, sample datasets and tests, which this PySpark batch job does not use.
