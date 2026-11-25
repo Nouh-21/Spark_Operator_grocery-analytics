@@ -23,11 +23,12 @@ RUN python3 /tmp/download_maven_artifact.py \
     && install -m 0644 /tmp/lz4-java.jar "/opt/spark/jars/lz4-java-${LZ4_JAVA_VERSION}.jar" \
     && rm /tmp/lz4-java.jar
 
-# Hadoop shades JLine 3.9.0, including its unused remote Telnet server module,
-# into hadoop-client-runtime. Remove that module and its Maven inventory entry.
-COPY scripts/remove_shaded_jline_telnet.py /tmp/remove_shaded_jline_telnet.py
-RUN python3 /tmp/remove_shaded_jline_telnet.py /opt/spark/jars/hadoop-client-runtime-*.jar \
-    && rm /tmp/remove_shaded_jline_telnet.py /tmp/download_maven_artifact.py
+# Hadoop shades JLine 3.9.0, including interactive built-ins, into
+# hadoop-client-runtime. The batch app needs none of them; remove those classes
+# and their Maven inventory entries, including the vulnerable Less pager.
+COPY scripts/remove_shaded_jline_builtins.py /tmp/remove_shaded_jline_builtins.py
+RUN python3 /tmp/remove_shaded_jline_builtins.py /opt/spark/jars/hadoop-client-runtime-*.jar \
+    && rm /tmp/remove_shaded_jline_builtins.py /tmp/download_maven_artifact.py
 
 COPY --chown=spark:root src/grocery_analytics /opt/spark/app/grocery_analytics
 COPY --chown=spark:root data/purchases.csv /opt/spark/data/purchases.csv
