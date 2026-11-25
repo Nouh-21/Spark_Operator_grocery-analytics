@@ -2,7 +2,7 @@ namespace: spark-jobs
 
 image:
   repository: docker.io/nouh23/grocery-analytics
-  tag: "f24003146c68bfcaeb3cd399f309cf5613f313a1"
+  tag: "0725cfa8c636174a8fcb1945b329785e377910bd"
   pullPolicy: Always
   pullSecrets:
     - dockerhub-registry
