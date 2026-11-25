@@ -50,6 +50,7 @@ Le Dockerfile contient également des ajustements de dépendances Java du runtim
 - il remplace `snappy-java` par la version 1.1.10.9 ;
 - il remplace LZ4 par `at.yawk.lz4:lz4-java:1.11.4`, version compatible avec l’API de Spark 4.3.0 et corrigeant le finding CVE-2026-106451 ;
 - il remplace `libthrift` 0.16.0 par la version 0.24.0 pour corriger CVE-2026-43871 ;
+- il remplace les JARs Derby (`derby`, `derbyshared`, `derbytools`) par la version 10.17.1.0, compatible avec le Java 21 de l’image et incluant le correctif de CVE-2022-46337 ;
 - il retire les classes et métadonnées des built-ins JLine intégrés dans Hadoop et dans le JAR JLine autonome de Spark 4.3.0. Cela enlève notamment le pager `Less` et le serveur Telnet concernés par les constats Trivy ; l’application batch n’utilise pas ces outils interactifs.
 - il retire Jetty 9.4.58 relocalisé du JAR Hadoop `hadoop-client-runtime-3.5.0.jar`, ainsi que ses métadonnées Maven. Hadoop 3.5.0 l’embarque, et Jetty 9 est en fin de vie ; ce job batch n’utilise pas le serveur HTTP intégré à Hadoop. Ce choix ne convient pas à une image destinée à démarrer des services Hadoop qui dépendent de ce serveur.
 

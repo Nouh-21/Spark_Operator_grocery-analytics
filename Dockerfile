@@ -54,6 +54,21 @@ RUN python3 /tmp/download_maven_artifact.py \
     && install -m 0644 /tmp/libthrift.jar "/opt/spark/jars/libthrift-${THRIFT_VERSION}.jar" \
     && rm /tmp/libthrift.jar
 
+# The image runs Java 21, so use Derby 10.17.1.0, which includes the
+# DERBY-7147 LDAP injection fix (CVE-2022-46337).
+ARG DERBY_VERSION=10.17.1.0
+RUN set -eu; \
+    for artifact in derby derbyshared derbytools; do \
+      python3 /tmp/download_maven_artifact.py \
+        "https://repo.maven.apache.org/maven2/org/apache/derby/${artifact}/${DERBY_VERSION}/${artifact}-${DERBY_VERSION}.jar" \
+        "/tmp/${artifact}.jar"; \
+    done; \
+    rm -f /opt/spark/jars/derby-*.jar /opt/spark/jars/derbyshared-*.jar /opt/spark/jars/derbytools-*.jar; \
+    for artifact in derby derbyshared derbytools; do \
+      install -m 0644 "/tmp/${artifact}.jar" "/opt/spark/jars/${artifact}-${DERBY_VERSION}.jar"; \
+    done; \
+    rm /tmp/derby.jar /tmp/derbyshared.jar /tmp/derbytools.jar
+
 # Hadoop 3.5.0 shades Jetty 9.4.58, which is EOL and cannot be updated from
 # Maven Central. This batch job does not use Hadoop's embedded Jetty server.
 COPY scripts/remove_shaded_hadoop_jetty.py /tmp/remove_shaded_hadoop_jetty.py

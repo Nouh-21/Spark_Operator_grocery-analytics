@@ -11,7 +11,7 @@ PySpark batch application that reads sample purchase lines, rejects invalid rows
 - `argocd/application.yaml`: Argo CD Application configured for manual sync.
 - `.github/workflows/ci-cd.yaml`: tests, image build and Trivy scan, Docker Hub publish, then GitOps tag update.
 
-The Docker build upgrades Ubuntu packages before installing Spark dependencies. It patches Spark Core's relocated Jetty to 12.1.15, removes the unused, shaded Jetty 9 classes from Hadoop's `hadoop-client-runtime-3.5.0.jar`, and updates Thrift to 0.24.0. Removing Hadoop's embedded Jetty is specific to this batch image; Hadoop services that require it need a supported Hadoop/Jetty distribution instead.
+The Docker build upgrades Ubuntu packages before installing Spark dependencies. It patches Spark Core's relocated Jetty to 12.1.15, removes the unused, shaded Jetty 9 classes from Hadoop's `hadoop-client-runtime-3.5.0.jar`, updates Thrift to 0.24.0, and updates Derby to 10.17.1.0 for the Java 21 runtime. Removing Hadoop's embedded Jetty is specific to this batch image; Hadoop services that require it need a supported Hadoop/Jetty distribution instead.
 
 ## GitHub configuration
 
