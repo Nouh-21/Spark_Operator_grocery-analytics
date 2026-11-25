@@ -61,7 +61,7 @@ jobs:
           format: json
           output: trivy-report.json
           # Keep the Trivy report, but do not block the delivery pipeline on findings.
-          exit-code: "0"
+          exit-code: "1"
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
