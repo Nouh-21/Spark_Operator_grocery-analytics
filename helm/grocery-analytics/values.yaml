@@ -2,7 +2,7 @@ namespace: spark-jobs
 
 image:
   repository: docker.io/nouh23/grocery-analytics
-  tag: latest
+  tag: "f24003146c68bfcaeb3cd399f309cf5613f313a1"
   pullPolicy: IfNotPresent
 
 spark:
